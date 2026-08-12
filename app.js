@@ -23,6 +23,7 @@ const elements = {
   playerCountLabel: document.getElementById('playerCountLabel'),
   resetGameBtn: document.getElementById('resetGameBtn'),
   currentBankerName: document.getElementById('currentBankerName'),
+  headerBankerBadge: document.getElementById('headerBankerBadge'),
   
   setupPromptCard: document.getElementById('setupPromptCard'),
   roundWorkflowContainer: document.getElementById('roundWorkflowContainer'),
