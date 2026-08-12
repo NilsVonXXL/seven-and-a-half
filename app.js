@@ -192,10 +192,6 @@ function toggleBurnPlayer(id) {
     delete state.currentRound.burned[id];
   } else {
     state.currentRound.burned[id] = true;
-    // Ensure they have a non-zero bet locked in if they busted
-    if (!state.currentRound.bets[id]) {
-      state.currentRound.bets[id] = 1; // default standard bet
-    }
   }
   
   saveToLocalStorage();
@@ -663,12 +659,12 @@ function renderBettingGrid(activePlayers) {
       
       <div class="bet-input-wrapper">
         <span class="bet-currency">€</span>
-        <input type="number" class="player-bet-input" data-id="${p.id}" value="${betVal}" placeholder="Place bet..." min="0.5" step="0.5" ${isBurned ? 'disabled' : ''}>
+        <input type="number" class="player-bet-input" data-id="${p.id}" value="${betVal}" placeholder="Place bet..." min="0.5" step="0.5">
       </div>
 
       <div class="bet-hotkeys">
         ${hotkeyValues.map(amt => `
-          <button class="btn btn-hotkey ${betVal === amt ? 'active' : ''}" data-id="${p.id}" data-amount="${amt}" ${isBurned ? 'disabled' : ''}>
+          <button class="btn btn-hotkey ${betVal === amt ? 'active' : ''}" data-id="${p.id}" data-amount="${amt}">
             ${amt}
           </button>
         `).join('')}
