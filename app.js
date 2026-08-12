@@ -44,6 +44,7 @@ const elements = {
   settleRoundBtn: document.getElementById('settleRoundBtn'),
   allWinBtn: document.getElementById('allWinBtn'),
   allLoseBtn: document.getElementById('allLoseBtn'),
+  lastHotkeyInput: document.getElementById('lastHotkeyInput'),
   
   // History
   historyListContainer: document.getElementById('historyListContainer'),
@@ -78,6 +79,16 @@ function loadFromLocalStorage() {
   if (saved) {
     try {
       state = JSON.parse(saved);
+      // Ensure settings & burned properties exist for backward compatibility
+      if (!state.settings) {
+        state.settings = { lastHotkey: 5 };
+      }
+      if (!state.currentRound) {
+        state.currentRound = { phase: 'betting', bets: {}, outcomes: {}, burned: {} };
+      }
+      if (!state.currentRound.burned) {
+        state.currentRound.burned = {};
+      }
     } catch (e) {
       console.error('Failed to parse saved state, resetting', e);
       initializeDefaultState();
@@ -89,10 +100,14 @@ function loadFromLocalStorage() {
 
 function initializeDefaultState() {
   state.players = JSON.parse(JSON.stringify(DEFAULT_PLAYERS));
+  state.settings = {
+    lastHotkey: 5
+  };
   state.currentRound = {
     phase: 'betting',
     bets: {},
-    outcomes: {}
+    outcomes: {},
+    burned: {}
   };
   state.history = [];
   saveToLocalStorage();
@@ -148,6 +163,45 @@ function setBanker(id) {
   render();
 }
 
+function movePlayerUp(index) {
+  if (index <= 0 || index >= state.players.length) return;
+  const temp = state.players[index];
+  state.players[index] = state.players[index - 1];
+  state.players[index - 1] = temp;
+  
+  saveToLocalStorage();
+  render();
+}
+
+function movePlayerDown(index) {
+  if (index < 0 || index >= state.players.length - 1) return;
+  const temp = state.players[index];
+  state.players[index] = state.players[index + 1];
+  state.players[index + 1] = temp;
+  
+  saveToLocalStorage();
+  render();
+}
+
+function toggleBurnPlayer(id) {
+  if (!state.currentRound.burned) {
+    state.currentRound.burned = {};
+  }
+  const isBurned = !!state.currentRound.burned[id];
+  if (isBurned) {
+    delete state.currentRound.burned[id];
+  } else {
+    state.currentRound.burned[id] = true;
+    // Ensure they have a non-zero bet locked in if they busted
+    if (!state.currentRound.bets[id]) {
+      state.currentRound.bets[id] = 50; // default standard bet
+    }
+  }
+  
+  saveToLocalStorage();
+  render();
+}
+
 function setPlayerBet(id, amount) {
   const val = parseInt(amount, 10);
   if (isNaN(val) || val < 0) {
@@ -187,10 +241,15 @@ function checkBettingValidity() {
 function advanceToResolution() {
   state.currentRound.phase = 'resolution';
   
-  // Clear old outcomes to force dealer to choose win/lose
+  // Clear old outcomes, but pre-fill "lose" for players who burned (busted)
   const activePlayers = getActivePlayersSorted();
   activePlayers.forEach(p => {
-    delete state.currentRound.outcomes[p.id];
+    const isBurned = state.currentRound.burned && !!state.currentRound.burned[p.id];
+    if (isBurned) {
+      state.currentRound.outcomes[p.id] = 'lose';
+    } else {
+      delete state.currentRound.outcomes[p.id];
+    }
   });
   
   saveToLocalStorage();
@@ -232,6 +291,11 @@ function backToBetting() {
   state.currentRound.phase = 'betting';
   saveToLocalStorage();
   render();
+  
+  // Scroll board content container back to top
+  if (elements.boardContent) {
+    elements.boardContent.scrollTop = 0;
+  }
 }
 
 // Settle the round mathematically
@@ -292,7 +356,8 @@ function settleRound() {
   state.currentRound = {
     phase: 'betting',
     bets: {},
-    outcomes: {}
+    outcomes: {},
+    burned: {}
   };
 
   saveToLocalStorage();
@@ -385,8 +450,8 @@ function updateChart() {
       backgroundColor: colorTransparent,
       borderWidth: 3,
       tension: 0.35, // Smooth curves
-      pointRadius: 4,
-      pointHoverRadius: 6,
+      pointRadius: 0,
+      pointHoverRadius: 0,
       fill: true
     };
   });
@@ -487,7 +552,7 @@ function renderRoster() {
     return;
   }
 
-  state.players.forEach(p => {
+  state.players.forEach((p, index) => {
     const card = document.createElement('div');
     card.className = `player-card ${p.isBanker ? 'is-banker' : ''}`;
     
@@ -503,6 +568,12 @@ function renderRoster() {
         <span class="player-chips ${balanceClass}">${formattedBalance} pts</span>
       </div>
       <div class="player-card-actions">
+        <button class="btn-icon reorder-btn up-btn" title="Move Up" data-id="${p.id}" ${index === 0 ? 'disabled' : ''}>
+          ▲
+        </button>
+        <button class="btn-icon reorder-btn down-btn" title="Move Down" data-id="${p.id}" ${index === state.players.length - 1 ? 'disabled' : ''}>
+          ▼
+        </button>
         ${!p.isBanker ? `
           <button class="btn-icon bank-btn" title="Set as Banker" data-id="${p.id}">
             👑
@@ -515,6 +586,9 @@ function renderRoster() {
     `;
 
     // Event hooks
+    card.querySelector('.up-btn').addEventListener('click', () => movePlayerUp(index));
+    card.querySelector('.down-btn').addEventListener('click', () => movePlayerDown(index));
+    
     const bankBtn = card.querySelector('.bank-btn');
     if (bankBtn) {
       bankBtn.addEventListener('click', () => setBanker(p.id));
@@ -569,24 +643,32 @@ function renderBettingGrid(activePlayers) {
 
   activePlayers.forEach(p => {
     const card = document.createElement('div');
-    card.className = 'board-card';
+    const isBurned = state.currentRound.burned && !!state.currentRound.burned[p.id];
+    card.className = `board-card ${isBurned ? 'is-burned' : ''}`;
     
     const betVal = state.currentRound.bets[p.id] || '';
+    const lastQuickBet = state.settings.lastHotkey || 5;
+    const hotkeyValues = [50, 1, 2, 3, 4, lastQuickBet];
     
     card.innerHTML = `
       <div class="card-player-header">
         <span class="card-player-name">${escapeHTML(p.name)}</span>
-        <span class="card-player-balance">${p.balance} pts</span>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          ${isBurned ? '<span class="burned-badge">Burned</span>' : ''}
+          <button class="btn-burn ${isBurned ? 'active' : ''}" data-id="${p.id}" title="Burn Player (Bust)">
+            🔥
+          </button>
+        </div>
       </div>
       
       <div class="bet-input-wrapper">
         <span class="bet-currency">€</span>
-        <input type="number" class="player-bet-input" data-id="${p.id}" value="${betVal}" placeholder="Place bet..." min="1" step="1">
+        <input type="number" class="player-bet-input" data-id="${p.id}" value="${betVal}" placeholder="Place bet..." min="1" step="1" ${isBurned ? 'disabled' : ''}>
       </div>
 
       <div class="bet-hotkeys">
-        ${[50, 100, 150, 200, 250, 300].map(amt => `
-          <button class="btn btn-hotkey ${betVal === amt ? 'active' : ''}" data-id="${p.id}" data-amount="${amt}">
+        ${hotkeyValues.map(amt => `
+          <button class="btn btn-hotkey ${betVal === amt ? 'active' : ''}" data-id="${p.id}" data-amount="${amt}" ${isBurned ? 'disabled' : ''}>
             ${amt}
           </button>
         `).join('')}
@@ -594,6 +676,10 @@ function renderBettingGrid(activePlayers) {
     `;
 
     // Event hooks
+    card.querySelector('.btn-burn').addEventListener('click', () => {
+      toggleBurnPlayer(p.id);
+    });
+
     const input = card.querySelector('.player-bet-input');
     input.addEventListener('input', (e) => {
       setPlayerBet(p.id, e.target.value);
@@ -612,7 +698,7 @@ function renderBettingGrid(activePlayers) {
 
     card.querySelectorAll('.btn-hotkey').forEach(btn => {
       btn.addEventListener('click', () => {
-        const amt = btn.getAttribute('data-amount');
+        const amt = parseInt(btn.getAttribute('data-amount'), 10);
         input.value = amt;
         setPlayerBet(p.id, amt);
         
@@ -761,11 +847,25 @@ function setupEventListeners() {
   // Settle outcomes quickly
   elements.allWinBtn.addEventListener('click', () => setAllOutcomes('win'));
   elements.allLoseBtn.addEventListener('click', () => setAllOutcomes('lose'));
+
+  // Custom Last Hotkey setting listener
+  elements.lastHotkeyInput.addEventListener('input', (e) => {
+    let val = parseInt(e.target.value, 10);
+    if (isNaN(val) || val < 1) {
+      val = 5; // fallback
+    }
+    state.settings.lastHotkey = val;
+    saveToLocalStorage();
+    renderRoundView(); // refresh quick bets with the new last hotkey
+  });
 }
 
 // Start App
 document.addEventListener('DOMContentLoaded', () => {
   loadFromLocalStorage();
+  if (elements.lastHotkeyInput && state.settings) {
+    elements.lastHotkeyInput.value = state.settings.lastHotkey || 5;
+  }
   setupEventListeners();
   render();
 });
