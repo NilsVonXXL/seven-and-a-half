@@ -344,6 +344,10 @@ function resetGame() {
 let balanceChart = null;
 
 function updateChart() {
+  if (typeof Chart === 'undefined') {
+    console.warn('Chart.js is not loaded yet');
+    return;
+  }
   const ctx = document.getElementById('balanceChart');
   if (!ctx) return;
 
