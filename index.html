@@ -10,6 +10,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
   <!-- Stylesheet -->
   <link rel="stylesheet" href="index.css">
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
@@ -140,6 +142,16 @@
       </section>
 
     </main>
+
+    <!-- Bottom Visual Chart Section -->
+    <section class="chart-section glass-panel">
+      <div class="panel-header">
+        <h2>Balance Performance History</h2>
+      </div>
+      <div class="chart-container">
+        <canvas id="balanceChart"></canvas>
+      </div>
+    </section>
 
     <!-- Footer Information -->
     <footer class="app-footer">

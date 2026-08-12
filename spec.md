@@ -62,6 +62,7 @@ To match physical game play, each round consists of two distinct phases:
 - When the round is submitted and settled:
   - Updates all players' persistent balances and the banker's balance in real-time.
   - Re-calculates and displays total stakes (in Euros €) and individual net standings.
+  - **Visual Performance Graph**: Renders an interactive stock-style line chart at the bottom, plotting each player's points round-by-round (utilizing HSL color distribution and shaded areas) to track balance trends.
 
 #### 4. History Log & Undo
 - A chronological feed of played rounds showing:

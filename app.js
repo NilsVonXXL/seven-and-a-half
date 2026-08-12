@@ -269,6 +269,12 @@ function settleRound() {
   // Apply net change to banker
   banker.balance += bankerChangeTotal;
 
+  // Take a snapshot of all player balances after settlements are applied
+  const balanceSnapshot = {};
+  state.players.forEach(p => {
+    balanceSnapshot[p.name] = p.balance;
+  });
+
   // Add to history
   const roundRecord = {
     id: 'round_' + Date.now(),
@@ -276,7 +282,8 @@ function settleRound() {
     bankerId: banker.id,
     bankerName: banker.name,
     settlements: settlements,
-    bankerChange: bankerChangeTotal
+    bankerChange: bankerChangeTotal,
+    balances: balanceSnapshot
   };
   state.history.unshift(roundRecord); // add to top of stack
 
@@ -334,11 +341,125 @@ function resetGame() {
 
 // --- Render Functions ---
 
+let balanceChart = null;
+
+function updateChart() {
+  const ctx = document.getElementById('balanceChart');
+  if (!ctx) return;
+
+  // Reconstruct historical balances of all current players
+  const chronoHistory = [...state.history].reverse();
+  
+  // X-axis: Start, R1, R2, R3...
+  const labels = ['Start'];
+  chronoHistory.forEach((r, idx) => {
+    labels.push(`R${idx + 1}`);
+  });
+
+  // Generate dataset for each current player
+  const datasets = state.players.map((player, index) => {
+    const hue = (index * 137.5) % 360; // Spaced out colors
+    const color = `hsl(${hue}, 85%, 60%)`;
+    const colorTransparent = `hsla(${hue}, 85%, 60%, 0.15)`;
+
+    const dataPoints = [0]; // Starts at 0 points
+    chronoHistory.forEach(round => {
+      let snapVal;
+      if (round.balances) {
+        snapVal = round.balances[player.name];
+      } else {
+        snapVal = player.balance; // Fallback
+      }
+      dataPoints.push(snapVal !== undefined ? snapVal : 0);
+    });
+
+    return {
+      label: player.name,
+      data: dataPoints,
+      borderColor: color,
+      backgroundColor: colorTransparent,
+      borderWidth: 3,
+      tension: 0.35, // Smooth curves
+      pointRadius: 4,
+      pointHoverRadius: 6,
+      fill: true
+    };
+  });
+
+  if (balanceChart) {
+    balanceChart.destroy();
+  }
+
+  // Draw chart using Chart.js library loaded via script CDN
+  balanceChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: datasets
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: {
+            color: '#ffffff',
+            font: {
+              family: "'Outfit', sans-serif",
+              weight: 'bold',
+              size: 13
+            }
+          }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(5, 26, 14, 0.95)',
+          titleColor: '#d4af37',
+          bodyColor: '#ffffff',
+          borderColor: 'rgba(255, 255, 255, 0.15)',
+          borderWidth: 1,
+          titleFont: { family: "'Outfit', sans-serif", weight: 'bold' },
+          bodyFont: { family: "'Inter', sans-serif" },
+          callbacks: {
+            label: function(context) {
+              return ` ${context.dataset.label}: ${context.parsed.y} €`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: {
+            color: 'rgba(255, 255, 255, 0.05)'
+          },
+          ticks: {
+            color: '#a8c3b4',
+            font: { family: "'Inter', sans-serif" }
+          }
+        },
+        y: {
+          grid: {
+            color: 'rgba(255, 255, 255, 0.05)'
+          },
+          ticks: {
+            color: '#a8c3b4',
+            font: { family: "'Inter', sans-serif" },
+            callback: function(value) {
+              return value + ' €';
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
 function render() {
   renderRoster();
   renderHistory();
   renderRoundView();
   updateHeader();
+  updateChart();
 }
 
 function updateHeader() {
