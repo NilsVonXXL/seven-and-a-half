@@ -26,6 +26,7 @@ const elements = {
   
   setupPromptCard: document.getElementById('setupPromptCard'),
   roundWorkflowContainer: document.getElementById('roundWorkflowContainer'),
+  boardContent: document.querySelector('.board-content'),
   
   // Phase Views
   bettingPhaseView: document.getElementById('bettingPhaseView'),
@@ -40,11 +41,31 @@ const elements = {
   confirmBetsBtn: document.getElementById('confirmBetsBtn'),
   backToBetsBtn: document.getElementById('backToBetsBtn'),
   settleRoundBtn: document.getElementById('settleRoundBtn'),
+  allWinBtn: document.getElementById('allWinBtn'),
+  allLoseBtn: document.getElementById('allLoseBtn'),
   
   // History
   historyListContainer: document.getElementById('historyListContainer'),
   undoBtn: document.getElementById('undoBtn')
 };
+
+// --- Helper: Get active players rotated starting from the player after the Banker ---
+function getActivePlayersSorted() {
+  const bankerIndex = state.players.findIndex(p => p.isBanker);
+  if (bankerIndex === -1) {
+    return state.players.filter(p => !p.isBanker);
+  }
+  
+  const activeSorted = [];
+  const len = state.players.length;
+  for (let i = 1; i < len; i++) {
+    const p = state.players[(bankerIndex + i) % len];
+    if (!p.isBanker) {
+      activeSorted.push(p);
+    }
+  }
+  return activeSorted;
+}
 
 // --- Local Storage Helpers ---
 function saveToLocalStorage() {
@@ -139,15 +160,16 @@ function setPlayerBet(id, amount) {
 }
 
 function setPlayerOutcome(id, outcome) {
-  if (['win', 'lose', 'push'].includes(outcome)) {
+  if (['win', 'lose'].includes(outcome)) {
     state.currentRound.outcomes[id] = outcome;
   }
   saveToLocalStorage();
+  checkResolutionValidity();
 }
 
 // Check if all players (excluding banker) have set their bets
 function checkBettingValidity() {
-  const activePlayers = state.players.filter(p => !p.isBanker);
+  const activePlayers = getActivePlayersSorted();
   let allSet = true;
   
   activePlayers.forEach(p => {
@@ -164,13 +186,42 @@ function checkBettingValidity() {
 function advanceToResolution() {
   state.currentRound.phase = 'resolution';
   
-  // Pre-fill outcomes with 'push' for any that aren't set
-  state.players.forEach(p => {
-    if (!p.isBanker && !state.currentRound.outcomes[p.id]) {
-      state.currentRound.outcomes[p.id] = 'push';
-    }
+  // Clear old outcomes to force dealer to choose win/lose
+  const activePlayers = getActivePlayersSorted();
+  activePlayers.forEach(p => {
+    delete state.currentRound.outcomes[p.id];
   });
   
+  saveToLocalStorage();
+  render();
+  
+  // Scroll board content container back to top
+  if (elements.boardContent) {
+    elements.boardContent.scrollTop = 0;
+  }
+}
+
+// Check if all players (excluding banker) have outcomes set (Won or Lost)
+function checkResolutionValidity() {
+  const activePlayers = getActivePlayersSorted();
+  let allSet = true;
+  
+  activePlayers.forEach(p => {
+    const outcome = state.currentRound.outcomes[p.id];
+    if (outcome !== 'win' && outcome !== 'lose') {
+      allSet = false;
+    }
+  });
+
+  elements.settleRoundBtn.disabled = !allSet || activePlayers.length === 0;
+}
+
+// Bulk set outcomes for all active players (e.g. All Won / All Lost)
+function setAllOutcomes(outcome) {
+  const activePlayers = getActivePlayersSorted();
+  activePlayers.forEach(p => {
+    state.currentRound.outcomes[p.id] = outcome;
+  });
   saveToLocalStorage();
   render();
 }
@@ -187,13 +238,13 @@ function settleRound() {
   const banker = state.players.find(p => p.isBanker);
   if (!banker) return;
 
-  const activePlayers = state.players.filter(p => !p.isBanker);
+  const activePlayers = getActivePlayersSorted();
   const settlements = [];
   let bankerChangeTotal = 0;
 
   activePlayers.forEach(p => {
     const bet = state.currentRound.bets[p.id] || 0;
-    const outcome = state.currentRound.outcomes[p.id] || 'push';
+    const outcome = state.currentRound.outcomes[p.id];
     let balanceChange = 0;
 
     if (outcome === 'win') {
@@ -350,7 +401,7 @@ function renderRoster() {
 
 function renderRoundView() {
   const banker = state.players.find(p => p.isBanker);
-  const activePlayers = state.players.filter(p => !p.isBanker);
+  const activePlayers = getActivePlayersSorted();
 
   // If we don't have enough players (at least 2: banker + 1 player)
   if (state.players.length < 2 || !banker) {
@@ -383,6 +434,7 @@ function renderRoundView() {
     elements.resolutionPhaseView.classList.remove('hidden');
     
     renderResolutionGrid(activePlayers);
+    checkResolutionValidity();
   }
 }
 
@@ -402,7 +454,7 @@ function renderBettingGrid(activePlayers) {
       </div>
       
       <div class="bet-input-wrapper">
-        <span class="bet-currency">$</span>
+        <span class="bet-currency">€</span>
         <input type="number" class="player-bet-input" data-id="${p.id}" value="${betVal}" placeholder="Place bet..." min="1" step="1">
       </div>
 
@@ -456,7 +508,7 @@ function renderResolutionGrid(activePlayers) {
     card.className = 'board-card';
     
     const bet = state.currentRound.bets[p.id] || 0;
-    const currentOutcome = state.currentRound.outcomes[p.id] || 'push';
+    const currentOutcome = state.currentRound.outcomes[p.id];
 
     card.innerHTML = `
       <div class="card-player-header">
@@ -465,17 +517,13 @@ function renderResolutionGrid(activePlayers) {
       </div>
 
       <div class="resolution-bet-display">
-        Locked Bet: <span>$${bet}</span>
+        Locked Bet: <span>€${bet}</span>
       </div>
 
       <div class="result-selector">
         <div class="result-option-wrapper">
           <input type="radio" id="win_${p.id}" name="result_${p.id}" value="win" class="result-option" ${currentOutcome === 'win' ? 'checked' : ''}>
           <label for="win_${p.id}" class="result-label">Won</label>
-        </div>
-        <div class="result-option-wrapper">
-          <input type="radio" id="push_${p.id}" name="result_${p.id}" value="push" class="result-option" ${currentOutcome === 'push' ? 'checked' : ''}>
-          <label for="push_${p.id}" class="result-label">Push</label>
         </div>
         <div class="result-option-wrapper">
           <input type="radio" id="lose_${p.id}" name="result_${p.id}" value="lose" class="result-option" ${currentOutcome === 'lose' ? 'checked' : ''}>
@@ -583,6 +631,10 @@ function setupEventListeners() {
 
   // Resolution Settle Action
   elements.settleRoundBtn.addEventListener('click', settleRound);
+
+  // Settle outcomes quickly
+  elements.allWinBtn.addEventListener('click', () => setAllOutcomes('win'));
+  elements.allLoseBtn.addEventListener('click', () => setAllOutcomes('lose'));
 }
 
 // Start App

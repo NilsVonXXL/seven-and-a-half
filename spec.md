@@ -45,21 +45,23 @@ The application is a **digital companion counter** designed to run on a website.
 #### 2. Round Flow & Dashboard
 To match physical game play, each round consists of two distinct phases:
 1. **Betting Phase (Start of Round)**:
-   - For each active player (except the current banker), their bet is input before cards are resolved.
+   - Active players (excluding the Banker) are sorted in play order: starting with the player immediately to the Banker's left (adding order) and wrapping clockwise.
+   - For each active player, their bet is input before cards are resolved.
    - **Bet Input**:
      - **Quick-Bet Hotkeys**: Standard buttons for fast entry: **50**, **100**, **150**, **200**, **250**, **300**.
-     - **Custom Amount Field**: A numeric text input for any custom bet size.
+     - **Custom Amount Field**: A numeric text input for any custom bet size in Euros (€).
    - Bets are unrestricted: players can always place bets of any size, and balances can go negative.
 2. **Resolution Phase (End of Round)**:
-   - After the physical cards are played, the dealer logs the outcome for each active player:
-     - **Won**: Player won their bet. The player's balance increases by their bet amount, and the Banker's balance decreases by the same amount.
-     - **Lost**: Player lost their bet. The player's balance decreases by their bet amount, and the Banker's balance increases by the same amount.
-     - **Push**: Tie. No points/chips are exchanged.
+   - When advancing to this phase, the dashboard automatically scrolls back to the top of the player list.
+   - A **Quick Select All** bar at the top allows marking **All Won** or **All Lost** with a single click.
+   - For each player, the dealer logs their outcome (Push has been removed):
+     - **Won**: Player won their bet. The player's balance increases by their bet amount (€), and the Banker's balance decreases by the same amount.
+     - **Lost**: Player lost their bet. The player's balance decreases by their bet amount (€), and the Banker's balance increases by the same amount.
 
 #### 3. Calculations & Ledger
 - When the round is submitted and settled:
   - Updates all players' persistent balances and the banker's balance in real-time.
-  - Re-calculates and displays total stakes and individual net standings.
+  - Re-calculates and displays total stakes (in Euros €) and individual net standings.
 
 #### 4. History Log & Undo
 - A chronological feed of played rounds showing:

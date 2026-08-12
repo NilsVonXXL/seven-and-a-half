@@ -541,6 +541,23 @@ input[type="text"]:focus, input[type="number"]:focus {
   border-left: 3px solid var(--gold);
 }
 
+.quick-settle-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+}
+
+.quick-settle-bar span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
 .players-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -636,7 +653,7 @@ input[type="text"]:focus, input[type="number"]:focus {
 /* Resolution Result Selector */
 .result-selector {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   background: rgba(0, 0, 0, 0.25);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
