@@ -194,7 +194,7 @@ function toggleBurnPlayer(id) {
     state.currentRound.burned[id] = true;
     // Ensure they have a non-zero bet locked in if they busted
     if (!state.currentRound.bets[id]) {
-      state.currentRound.bets[id] = 50; // default standard bet
+      state.currentRound.bets[id] = 1; // default standard bet
     }
   }
   
@@ -203,7 +203,7 @@ function toggleBurnPlayer(id) {
 }
 
 function setPlayerBet(id, amount) {
-  const val = parseInt(amount, 10);
+  const val = parseFloat(amount);
   if (isNaN(val) || val < 0) {
     delete state.currentRound.bets[id];
   } else {
@@ -648,7 +648,7 @@ function renderBettingGrid(activePlayers) {
     
     const betVal = state.currentRound.bets[p.id] || '';
     const lastQuickBet = state.settings.lastHotkey || 5;
-    const hotkeyValues = [50, 1, 2, 3, 4, lastQuickBet];
+    const hotkeyValues = [0.5, 1, 2, 3, 4, lastQuickBet];
     
     card.innerHTML = `
       <div class="card-player-header">
@@ -663,7 +663,7 @@ function renderBettingGrid(activePlayers) {
       
       <div class="bet-input-wrapper">
         <span class="bet-currency">€</span>
-        <input type="number" class="player-bet-input" data-id="${p.id}" value="${betVal}" placeholder="Place bet..." min="1" step="1" ${isBurned ? 'disabled' : ''}>
+        <input type="number" class="player-bet-input" data-id="${p.id}" value="${betVal}" placeholder="Place bet..." min="0.5" step="0.5" ${isBurned ? 'disabled' : ''}>
       </div>
 
       <div class="bet-hotkeys">
@@ -685,9 +685,9 @@ function renderBettingGrid(activePlayers) {
       setPlayerBet(p.id, e.target.value);
       // Re-render hotkeys state manually to avoid visual input flashing
       const buttons = card.querySelectorAll('.btn-hotkey');
-      const currentVal = parseInt(e.target.value, 10);
+      const currentVal = parseFloat(e.target.value);
       buttons.forEach(btn => {
-        const btnAmt = parseInt(btn.getAttribute('data-amount'), 10);
+        const btnAmt = parseFloat(btn.getAttribute('data-amount'));
         if (btnAmt === currentVal) {
           btn.classList.add('active');
         } else {
@@ -698,7 +698,7 @@ function renderBettingGrid(activePlayers) {
 
     card.querySelectorAll('.btn-hotkey').forEach(btn => {
       btn.addEventListener('click', () => {
-        const amt = parseInt(btn.getAttribute('data-amount'), 10);
+        const amt = parseFloat(btn.getAttribute('data-amount'));
         input.value = amt;
         setPlayerBet(p.id, amt);
         
@@ -850,8 +850,8 @@ function setupEventListeners() {
 
   // Custom Last Hotkey setting listener
   elements.lastHotkeyInput.addEventListener('input', (e) => {
-    let val = parseInt(e.target.value, 10);
-    if (isNaN(val) || val < 1) {
+    let val = parseFloat(e.target.value);
+    if (isNaN(val) || val <= 0) {
       val = 5; // fallback
     }
     state.settings.lastHotkey = val;

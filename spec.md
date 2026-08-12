@@ -48,7 +48,7 @@ To match physical game play, each round consists of two distinct phases:
    - Active players (excluding the Banker) are sorted in play order: starting with the player immediately to the Banker's left (adding order) and wrapping clockwise.
    - For each active player, their bet is input before cards are resolved.
    - **Bet Input**:
-     - **Quick-Bet Hotkeys**: Standard buttons for fast entry: **50**, **100**, **150**, **200**, **250**, **300**.
+     - **Quick-Bet Hotkeys**: Standard buttons for fast entry: **0.5**, **1**, **2**, **3**, **4**, and **5** (or a customizable 6th value).
      - **Custom Amount Field**: A numeric text input for any custom bet size in Euros (€).
    - Bets are unrestricted: players can always place bets of any size, and balances can go negative.
 2. **Resolution Phase (End of Round)**:
