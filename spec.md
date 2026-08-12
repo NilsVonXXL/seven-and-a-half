@@ -39,7 +39,7 @@ The application is a **digital companion counter** designed to run on a website.
 
 #### 1. Player Management
 - **Add/Remove Players**: Dynamic list of players participating in the game.
-- **Starting Score / Balances**: Players start with a baseline balance (e.g., 1000 points/chips). **There are no chip limits:** players can go negative, and they can always place any bet size regardless of their current balance.
+- **Starting Score / Balances**: Players start with a baseline balance of 0 points/chips. **There are no chip limits:** players can go negative, and they can always place any bet size regardless of their balance.
 - **Active Banker Selection**: A clear visual indicator showing who is currently the Banker. The Banker can be changed at any time.
 
 #### 2. Round Flow & Dashboard

@@ -1,8 +1,8 @@
 // --- Application State ---
 const DEFAULT_PLAYERS = [
-  { id: 'p1', name: 'Alice', balance: 1000, isBanker: false },
-  { id: 'p2', name: 'Bob', balance: 1000, isBanker: true },
-  { id: 'p3', name: 'Charlie', balance: 1000, isBanker: false }
+  { id: 'p1', name: 'Alice', balance: 0, isBanker: false },
+  { id: 'p2', name: 'Bob', balance: 0, isBanker: true },
+  { id: 'p3', name: 'Charlie', balance: 0, isBanker: false }
 ];
 
 let state = {
@@ -81,7 +81,7 @@ function addPlayer(name) {
   const newPlayer = {
     id: 'p_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
     name: name.trim(),
-    balance: 1000,
+    balance: 0,
     isBanker: state.players.length === 0 // automatically banker if first player
   };
   state.players.push(newPlayer);
@@ -275,7 +275,7 @@ function undoLastRound() {
 
 // Reset Entire Game
 function resetGame() {
-  if (confirm("Are you sure you want to reset the game? This will reset all players to 1000 chips and wipe the history log.")) {
+  if (confirm("Are you sure you want to reset the game? This will reset all players to 0 points and wipe the history log.")) {
     initializeDefaultState();
     render();
   }
@@ -314,7 +314,7 @@ function renderRoster() {
     const card = document.createElement('div');
     card.className = `player-card ${p.isBanker ? 'is-banker' : ''}`;
     
-    const balanceClass = p.balance > 1000 ? 'positive' : (p.balance < 1000 ? 'negative' : 'neutral');
+    const balanceClass = p.balance > 0 ? 'positive' : (p.balance < 0 ? 'negative' : 'neutral');
     const formattedBalance = (p.balance >= 0 ? '' : '') + p.balance;
 
     card.innerHTML = `
