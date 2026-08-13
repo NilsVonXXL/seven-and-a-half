@@ -48,7 +48,10 @@ const elements = {
   
   // History
   historyListContainer: document.getElementById('historyListContainer'),
-  undoBtn: document.getElementById('undoBtn')
+  undoBtn: document.getElementById('undoBtn'),
+  
+  // Stats
+  statsContainer: document.getElementById('statsContainer')
 };
 
 // --- Helper: Get active players rotated starting from the player after the Banker ---
@@ -67,6 +70,16 @@ function getActivePlayersSorted() {
     }
   }
   return activeSorted;
+}
+
+// --- Helper: Scroll to the top of the round board ---
+function scrollToBoardTop() {
+  if (elements.boardContent) {
+    elements.boardContent.scrollTop = 0;
+  }
+  if (elements.roundPhaseTitle) {
+    elements.roundPhaseTitle.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 }
 
 // --- Local Storage Helpers ---
@@ -250,11 +263,7 @@ function advanceToResolution() {
   
   saveToLocalStorage();
   render();
-  
-  // Scroll board content container back to top
-  if (elements.boardContent) {
-    elements.boardContent.scrollTop = 0;
-  }
+  scrollToBoardTop();
 }
 
 // Check if all players (excluding banker) have outcomes set (Won or Lost)
@@ -287,11 +296,7 @@ function backToBetting() {
   state.currentRound.phase = 'betting';
   saveToLocalStorage();
   render();
-  
-  // Scroll board content container back to top
-  if (elements.boardContent) {
-    elements.boardContent.scrollTop = 0;
-  }
+  scrollToBoardTop();
 }
 
 // Settle the round mathematically
@@ -323,7 +328,8 @@ function settleRound() {
       playerName: p.name,
       bet: bet,
       outcome: outcome,
-      change: balanceChange
+      change: balanceChange,
+      burned: state.currentRound.burned ? !!state.currentRound.burned[p.id] : false
     });
   });
 
@@ -358,6 +364,7 @@ function settleRound() {
 
   saveToLocalStorage();
   render();
+  scrollToBoardTop();
 }
 
 // Undo Last Settle
@@ -390,6 +397,7 @@ function undoLastRound() {
 
     saveToLocalStorage();
     render();
+    scrollToBoardTop();
   }
 }
 
@@ -526,6 +534,7 @@ function render() {
   renderRoundView();
   updateHeader();
   updateChart();
+  renderStats();
 }
 
 function updateHeader() {
@@ -798,6 +807,374 @@ function renderHistory() {
 
     elements.historyListContainer.appendChild(card);
   });
+}
+
+// --- Statistics Calculations & Rendering ---
+
+function calculateStats() {
+  const stats = {
+    banker: {
+      totalRounds: 0,
+      winRounds: 0,
+      lossRounds: 0,
+      totalIncome: 0,
+      totalWins: 0,
+      totalLosses: 0,
+      winPercentage: 0,
+      avgWin: 0,
+      avgLoss: 0,
+      avgIncome: 0
+    },
+    table: {
+      totalRounds: 0,
+      totalBetVolume: 0,
+      avgBetSize: 0,
+      totalBetsCount: 0,
+      maxBetPlaced: 0
+    },
+    players: {} // playerId -> playerStats
+  };
+
+  // Pre-populate players map with current players
+  state.players.forEach(p => {
+    stats.players[p.id] = {
+      id: p.id,
+      name: p.name,
+      roundsAsPlayer: 0,
+      roundsAsBanker: 0,
+      winRounds: 0,
+      lossRounds: 0,
+      burnedRounds: 0,
+      betSum: 0,
+      winSum: 0,
+      lossSum: 0,
+      playerIncomeSum: 0,
+      bankerIncomeSum: 0,
+      maxSingleWin: 0,
+      maxSingleLoss: 0,
+      
+      // calculated metrics
+      winPercentage: 0,
+      avgBet: 0,
+      avgWin: 0,
+      avgLoss: 0,
+      avgPlayerIncome: 0,
+      avgBankerIncome: 0,
+      avgOverallIncome: 0,
+      burnRate: 0
+    };
+  });
+
+  const totalRounds = state.history.length;
+  stats.banker.totalRounds = totalRounds;
+  stats.table.totalRounds = totalRounds;
+
+  // Process history
+  state.history.forEach(round => {
+    // Banker Stats
+    const bankerId = round.bankerId;
+    const bankerChange = round.bankerChange || 0;
+
+    stats.banker.totalIncome += bankerChange;
+    if (bankerChange > 0) {
+      stats.banker.winRounds += 1;
+      stats.banker.totalWins += bankerChange;
+    } else if (bankerChange < 0) {
+      stats.banker.lossRounds += 1;
+      stats.banker.totalLosses += Math.abs(bankerChange);
+    }
+
+    // If banker is currently in roster, record their banker rounds
+    if (stats.players[bankerId]) {
+      const pStats = stats.players[bankerId];
+      pStats.roundsAsBanker += 1;
+      pStats.bankerIncomeSum += bankerChange;
+    }
+
+    // Settlements
+    (round.settlements || []).forEach(set => {
+      const pId = set.playerId;
+      const bet = set.bet || 0;
+      const change = set.change || 0;
+      const outcome = set.outcome; // 'win' or 'lose'
+      const burned = !!set.burned;
+
+      stats.table.totalBetVolume += bet;
+      stats.table.totalBetsCount += 1;
+      if (bet > stats.table.maxBetPlaced) {
+        stats.table.maxBetPlaced = bet;
+      }
+
+      if (stats.players[pId]) {
+        const pStats = stats.players[pId];
+        pStats.roundsAsPlayer += 1;
+        pStats.betSum += bet;
+        pStats.playerIncomeSum += change;
+
+        if (outcome === 'win') {
+          pStats.winRounds += 1;
+          pStats.winSum += change;
+          if (change > pStats.maxSingleWin) {
+            pStats.maxSingleWin = change;
+          }
+        } else if (outcome === 'lose') {
+          pStats.lossRounds += 1;
+          pStats.lossSum += Math.abs(change);
+          if (Math.abs(change) > pStats.maxSingleLoss) {
+            pStats.maxSingleLoss = Math.abs(change);
+          }
+          if (burned) {
+            pStats.burnedRounds += 1;
+          }
+        }
+      }
+    });
+  });
+
+  // Calculate final banker metrics
+  if (totalRounds > 0) {
+    stats.banker.winPercentage = (stats.banker.winRounds / totalRounds) * 100;
+    stats.banker.avgIncome = stats.banker.totalIncome / totalRounds;
+    
+    if (stats.banker.winRounds > 0) {
+      stats.banker.avgWin = stats.banker.totalWins / stats.banker.winRounds;
+    }
+    if (stats.banker.lossRounds > 0) {
+      stats.banker.avgLoss = stats.banker.totalLosses / stats.banker.lossRounds;
+    }
+  }
+
+  // Calculate final table metrics
+  if (stats.table.totalBetsCount > 0) {
+    stats.table.avgBetSize = stats.table.totalBetVolume / stats.table.totalBetsCount;
+  }
+
+  // Calculate player final metrics
+  Object.keys(stats.players).forEach(pId => {
+    const pStats = stats.players[pId];
+    const totalPlayerRounds = pStats.winRounds + pStats.lossRounds;
+    
+    if (totalPlayerRounds > 0) {
+      pStats.winPercentage = (pStats.winRounds / totalPlayerRounds) * 100;
+    }
+    
+    if (pStats.roundsAsPlayer > 0) {
+      pStats.avgBet = pStats.betSum / pStats.roundsAsPlayer;
+      pStats.avgPlayerIncome = pStats.playerIncomeSum / pStats.roundsAsPlayer;
+      pStats.burnRate = (pStats.burnedRounds / pStats.roundsAsPlayer) * 100;
+    }
+
+    if (pStats.winRounds > 0) {
+      pStats.avgWin = pStats.winSum / pStats.winRounds;
+    }
+    
+    if (pStats.lossRounds > 0) {
+      pStats.avgLoss = pStats.lossSum / pStats.lossRounds;
+    }
+
+    if (pStats.roundsAsBanker > 0) {
+      pStats.avgBankerIncome = pStats.bankerIncomeSum / pStats.roundsAsBanker;
+    }
+
+    const totalInvolvement = pStats.roundsAsPlayer + pStats.roundsAsBanker;
+    if (totalInvolvement > 0) {
+      pStats.avgOverallIncome = (pStats.playerIncomeSum + pStats.bankerIncomeSum) / totalInvolvement;
+    }
+  });
+
+  return stats;
+}
+
+function renderStats() {
+  if (!elements.statsContainer) return;
+
+  if (state.history.length === 0) {
+    elements.statsContainer.innerHTML = '<div class="empty-state">No rounds played in this session. Stats will appear here.</div>';
+    return;
+  }
+
+  const stats = calculateStats();
+
+  // 1. Overview Cards HTML
+  const bankIncomeSign = stats.banker.avgIncome > 0 ? '+' : '';
+  const bankIncomeClass = stats.banker.avgIncome > 0 ? 'positive' : (stats.banker.avgIncome < 0 ? 'negative' : 'neutral');
+  
+  let cardsHtml = `
+    <div class="stats-grid">
+      <!-- Banker Card -->
+      <div class="stats-card banker-card">
+        <div class="stats-card-title-row">
+          <span class="stats-card-title">Banker Overall</span>
+          <span class="stats-card-icon">👑</span>
+        </div>
+        <div class="stats-card-value ${bankIncomeClass}">
+          ${bankIncomeSign}${stats.banker.avgIncome.toFixed(2)} € <span style="font-size: 13px; font-weight: normal; color: var(--text-muted);">/ round avg</span>
+        </div>
+        <div class="stats-card-sub-grid">
+          <div class="stats-sub-item">
+            <span class="stats-sub-label">Win %</span>
+            <span class="stats-sub-value banker-gold">${stats.banker.winPercentage.toFixed(1)}%</span>
+          </div>
+          <div class="stats-sub-item">
+            <span class="stats-sub-label">Rounds</span>
+            <span class="stats-sub-value">${stats.banker.totalRounds}</span>
+          </div>
+          <div class="stats-sub-item">
+            <span class="stats-sub-label">Avg Win</span>
+            <span class="stats-sub-value positive">+${stats.banker.avgWin.toFixed(2)} €</span>
+          </div>
+          <div class="stats-sub-item">
+            <span class="stats-sub-label">Avg Loss</span>
+            <span class="stats-sub-value negative">-${stats.banker.avgLoss.toFixed(2)} €</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Table Summary Card -->
+      <div class="stats-card">
+        <div class="stats-card-title-row">
+          <span class="stats-card-title">Table Summary</span>
+          <span class="stats-card-icon">📊</span>
+        </div>
+        <div class="stats-card-value">
+          ${stats.table.totalBetVolume.toFixed(1)} € <span style="font-size: 13px; font-weight: normal; color: var(--text-muted);">total bet volume</span>
+        </div>
+        <div class="stats-card-sub-grid">
+          <div class="stats-sub-item">
+            <span class="stats-sub-label">Rounds Played</span>
+            <span class="stats-sub-value">${stats.table.totalRounds}</span>
+          </div>
+          <div class="stats-sub-item">
+            <span class="stats-sub-label">Avg Bet Size</span>
+            <span class="stats-sub-value">${stats.table.avgBetSize.toFixed(2)} €</span>
+          </div>
+          <div class="stats-sub-item">
+            <span class="stats-sub-label">Bets Placed</span>
+            <span class="stats-sub-value">${stats.table.totalBetsCount}</span>
+          </div>
+          <div class="stats-sub-item">
+            <span class="stats-sub-label">Max Bet Size</span>
+            <span class="stats-sub-value">${(stats.table.maxBetPlaced || 0).toFixed(2)} €</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Records Card -->
+      <div class="stats-card">
+        <div class="stats-card-title-row">
+          <span class="stats-card-title">Session Records</span>
+          <span class="stats-card-icon">🏆</span>
+        </div>
+        <div class="stats-card-value" style="font-size: 18px; line-height: 1.4; font-weight: 700;">
+          Max Win: <span class="positive">+${getMaxPlayerWin(stats).toFixed(2)} €</span>
+          <br>
+          Max Loss: <span class="negative">-${getMaxPlayerLoss(stats).toFixed(2)} €</span>
+        </div>
+        <div class="stats-card-sub-grid" style="grid-template-columns: 1fr;">
+          <div class="stats-sub-item">
+            <span class="stats-sub-label">Highest Burn Rate</span>
+            <span class="stats-sub-value text-secondary">${getHighestBurnRatePlayer(stats)}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // 2. Players Table HTML
+  let tableHtml = `
+    <div class="stats-table-wrapper">
+      <table class="stats-table">
+        <thead>
+          <tr>
+            <th>Player Name</th>
+            <th class="center">Rounds (Pl/Bk)</th>
+            <th class="num">Win % (as Player)</th>
+            <th class="num">Avg Bet</th>
+            <th class="num">Avg Win</th>
+            <th class="num">Avg Loss</th>
+            <th class="num highlight-cell">Avg Player Income</th>
+            <th class="num highlight-cell">Avg Banker Income</th>
+            <th class="center">Burn %</th>
+            <th class="num">Records (Max W/L)</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
+
+  state.players.forEach(p => {
+    const pStats = stats.players[p.id];
+    if (!pStats) return;
+
+    const winClass = pStats.winPercentage > 50 ? 'positive' : (pStats.winPercentage < 40 && pStats.roundsAsPlayer > 0 ? 'negative' : 'neutral');
+    
+    const pIncomeSign = pStats.avgPlayerIncome > 0 ? '+' : '';
+    const pIncomeClass = pStats.avgPlayerIncome > 0 ? 'positive' : (pStats.avgPlayerIncome < 0 ? 'negative' : 'neutral');
+    
+    const bIncomeSign = pStats.avgBankerIncome > 0 ? '+' : '';
+    const bIncomeClass = pStats.avgBankerIncome > 0 ? 'positive' : (pStats.avgBankerIncome < 0 ? 'negative' : 'neutral');
+
+    const burnClass = pStats.burnRate > 50 ? 'negative' : (pStats.burnRate < 25 && pStats.roundsAsPlayer > 0 ? 'positive' : 'neutral');
+
+    tableHtml += `
+      <tr>
+        <td class="player-name-cell">${escapeHTML(p.name)} ${p.isBanker ? '<span class="banker-gold">👑</span>' : ''}</td>
+        <td class="center">${pStats.roundsAsPlayer} / ${pStats.roundsAsBanker}</td>
+        <td class="num font-title ${winClass}">${pStats.roundsAsPlayer > 0 ? pStats.winPercentage.toFixed(1) + '%' : '-'}</td>
+        <td class="num">${pStats.roundsAsPlayer > 0 ? pStats.avgBet.toFixed(2) + ' €' : '-'}</td>
+        <td class="num positive">${pStats.winRounds > 0 ? '+' + pStats.avgWin.toFixed(2) + ' €' : '-'}</td>
+        <td class="num negative">${pStats.lossRounds > 0 ? '-' + pStats.avgLoss.toFixed(2) + ' €' : '-'}</td>
+        <td class="num highlight-cell ${pIncomeClass}">${pStats.roundsAsPlayer > 0 ? pIncomeSign + pStats.avgPlayerIncome.toFixed(2) + ' €' : '-'}</td>
+        <td class="num highlight-cell ${bIncomeClass}">${pStats.roundsAsBanker > 0 ? bIncomeSign + pStats.avgBankerIncome.toFixed(2) + ' €' : '-'}</td>
+        <td class="center ${burnClass}">${pStats.roundsAsPlayer > 0 ? pStats.burnRate.toFixed(1) + '%' : '-'}</td>
+        <td class="num font-title">
+          <span class="positive">${pStats.maxSingleWin > 0 ? '+' + pStats.maxSingleWin.toFixed(1) + ' €' : '-'}</span>
+          /
+          <span class="negative">${pStats.maxSingleLoss > 0 ? '-' + pStats.maxSingleLoss.toFixed(1) + ' €' : '-'}</span>
+        </td>
+      </tr>
+    `;
+  });
+
+  tableHtml += `
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  elements.statsContainer.innerHTML = cardsHtml + tableHtml;
+}
+
+// Helpers for records card
+function getMaxPlayerWin(stats) {
+  let max = 0;
+  Object.keys(stats.players).forEach(pId => {
+    const val = stats.players[pId].maxSingleWin;
+    if (val > max) max = val;
+  });
+  return max;
+}
+
+// Helpers for records card
+function getMaxPlayerLoss(stats) {
+  let max = 0;
+  Object.keys(stats.players).forEach(pId => {
+    const val = stats.players[pId].maxSingleLoss;
+    if (val > max) max = val;
+  });
+  return max;
+}
+
+function getHighestBurnRatePlayer(stats) {
+  let maxRate = -1;
+  let playerName = '-';
+  Object.keys(stats.players).forEach(pId => {
+    const p = stats.players[pId];
+    if (p.roundsAsPlayer > 0 && p.burnRate > maxRate) {
+      maxRate = p.burnRate;
+      playerName = `${p.name} (${p.burnRate.toFixed(1)}%)`;
+    }
+  });
+  return playerName;
 }
 
 // --- Utilities ---
